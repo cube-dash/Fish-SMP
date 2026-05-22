@@ -52,13 +52,6 @@ function createBot() {
 
 console.log(`🤖 Starting bot as ${username}`);
 
-const bot = mineflayer.createBot({
-  host: config.serverHost,
-  port: config.serverPort,
-  username: username,
-  auth: 'offline',
-  version: '1.21.5'
-});
 
   let movementLoop;
   let lookLoop;
