@@ -48,9 +48,17 @@ function createBot() {
     viewDistance: config.botChunk
   });
 
-  const selectedUsername = bot.username;
+  const username = generateUsername();
 
-  console.log(`🤖 Starting bot as ${selectedUsername}`);
+console.log(`🤖 Starting bot as ${username}`);
+
+const bot = mineflayer.createBot({
+  host: config.serverHost,
+  port: config.serverPort,
+  username: username,
+  auth: 'offline',
+  version: '1.21.5'
+});
 
   let movementLoop;
   let lookLoop;
