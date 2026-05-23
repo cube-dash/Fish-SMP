@@ -93,7 +93,7 @@ console.log(`🤖 Starting bot as ${username}`);
 
   bot.on('spawn', () => {
 
-    console.log(`✅ ${selectedUsername} joined successfully`);
+    console.log(`✅ ${bot.username} joined successfully`);
 
     // Random logout after 1-3 hours
     const leaveTime =
