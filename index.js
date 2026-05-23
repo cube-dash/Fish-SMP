@@ -1,10 +1,11 @@
 const http = require('http');
 const mineflayer = require('mineflayer');
+const mc = require('minecraft-protocol');
 const config = require('./config.json');
 
 //
 // ─────────────────────────────────────────────
-// KEEP RENDER ALIVE (web server)
+// KEEP RENDER ALIVE
 // ─────────────────────────────────────────────
 //
 const server = http.createServer((req, res) => {
@@ -18,7 +19,7 @@ server.listen(process.env.PORT || 3000, () => {
 
 //
 // ─────────────────────────────────────────────
-// USERNAME SYSTEM (NO REPEATS)
+// USERNAME SYSTEM
 // ─────────────────────────────────────────────
 //
 let lastUsername = null;
@@ -29,41 +30,59 @@ function randomChoice(arr) {
 
 function generateUsername() {
   const usernames = ['67Hunter', 'TungTung', 'FishingDuck'];
-
   const available = usernames.filter(u => u !== lastUsername);
-
   const selected = randomChoice(available);
-
   lastUsername = selected;
-
   return selected;
 }
 
 //
 // ─────────────────────────────────────────────
-// BOT LOOP
+// SERVER CHECK (IMPORTANT FIX)
 // ─────────────────────────────────────────────
 //
+function waitForServer(cb) {
+  const check = setInterval(() => {
+    mc.ping(
+      {
+        host: config.serverHost,
+        port: config.serverPort
+      },
+      (err) => {
+        if (!err) {
+          clearInterval(check);
+          console.log('✅ Server is reachable');
+          cb();
+        } else {
+          console.log('⏳ Waiting for server...');
+        }
+      }
+    );
+  }, 10000);
+}
+
+//
+// ─────────────────────────────────────────────
+// BOT SYSTEM
+// ─────────────────────────────────────────────
+//
+let reconnectDelay = 15000;
+
 function createBot() {
-  const selectedUsername = generateUsername();
+  const username = generateUsername();
 
   const bot = mineflayer.createBot({
     host: config.serverHost,
     port: config.serverPort,
-    username: selectedUsername,
+    username,
     auth: 'offline',
-    version: '1.21.5',
+    version: false,
     viewDistance: config.botChunk
   });
 
-  console.log(`🤖 Starting bot as ${selectedUsername}`);
+  console.log(`🤖 Starting bot as ${username}`);
 
-  let movementLoop;
-  let lookLoop;
-  let chatLoop;
-  let randomActionLoop;
-  let antiAfkLoop;
-  let leaveTimeout;
+  let movementLoop, lookLoop, chatLoop, randomActionLoop, antiAfkLoop, leaveTimeout;
 
   const chatMessages = [
     'lol','wait','lag','brb','one sec','yo','what happened',
@@ -73,13 +92,29 @@ function createBot() {
 
   const actions = ['forward', 'back', 'left', 'right'];
 
+  function cleanup() {
+    clearInterval(movementLoop);
+    clearInterval(lookLoop);
+    clearInterval(chatLoop);
+    clearInterval(randomActionLoop);
+    clearInterval(antiAfkLoop);
+    clearTimeout(leaveTimeout);
+  }
+
+  //
+  // ─────────────────────────────────────────────
+  // SPAWN
+  // ─────────────────────────────────────────────
+  //
   bot.on('spawn', () => {
-    console.log(`✅ ${selectedUsername} joined successfully`);
+    console.log(`✅ ${username} joined successfully`);
+
+    reconnectDelay = 15000;
 
     const leaveTime = (1 + Math.random() * 2) * 60 * 60 * 1000;
 
     leaveTimeout = setTimeout(() => {
-      console.log('🚪 Simulating player leaving');
+      console.log('🚪 Leaving');
       bot.quit('brb');
     }, leaveTime);
 
@@ -95,17 +130,15 @@ function createBot() {
         );
 
         const move = randomChoice(actions);
-
         bot.setControlState(move, true);
 
         setTimeout(() => {
           if (!bot.entity) return;
           bot.setControlState(move, false);
-        }, 1000 + Math.random() * 1500);
+        }, 1200 + Math.random() * 1500);
 
         if (Math.random() > 0.6) {
           bot.setControlState('jump', true);
-
           setTimeout(() => {
             if (!bot.entity) return;
             bot.setControlState('jump', false);
@@ -190,54 +223,31 @@ function createBot() {
     }, 4000);
   });
 
-  bot.on('chat', (username, message) => {
-    if (username === selectedUsername) return;
-
-    if (Math.random() > 0.93) {
-      const replies = ['lol','true','ok','what','bruh','real','yea','maybe','idk','nah'];
-
-      const reply = randomChoice(replies);
-
-      const typingDelay =
-        1200 + reply.length * 120 + Math.random() * 2500;
-
-      bot.clearControlStates();
-
-      setTimeout(() => {
-        if (!bot.entity) return;
-        bot.chat(reply);
-      }, typingDelay);
-    }
-  });
-
+  //
+  // ─────────────────────────────────────────────
+  // ERROR HANDLING
+  // ─────────────────────────────────────────────
+  //
   bot.on('error', (err) => {
     console.log('⚠️ Error:', err.message);
-
-    if (['ECONNRESET', 'ETIMEDOUT'].includes(err.code)) return;
   });
-
-  function cleanup() {
-    clearInterval(movementLoop);
-    clearInterval(lookLoop);
-    clearInterval(chatLoop);
-    clearInterval(randomActionLoop);
-    clearInterval(antiAfkLoop);
-    clearTimeout(leaveTimeout);
-  }
 
   bot.on('end', () => {
     console.log('⛔️ Bot disconnected');
 
     cleanup();
 
-    const rejoinTime = 15000 + Math.random() * 15000;
+    reconnectDelay = Math.min(reconnectDelay * 1.5, 120000);
 
-    console.log(`🔄 Rejoining in ${Math.floor(rejoinTime / 1000)} seconds...`);
+    console.log(`🔄 Rejoining in ${reconnectDelay / 1000}s`);
 
-    setTimeout(() => {
-      createBot();
-    }, rejoinTime);
+    setTimeout(createBot, reconnectDelay);
   });
 }
 
-createBot();
+//
+// ─────────────────────────────────────────────
+// START ONLY WHEN SERVER IS READY
+// ─────────────────────────────────────────────
+//
+waitForServer(createBot);
